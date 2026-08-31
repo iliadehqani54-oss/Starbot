@@ -650,8 +650,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "سلام 👋\n\n"
-        "به فروشگاه Stars خوش آمدید ⭐\n\n"
+        "به ربات فروش استارز خوش آمدید⭐️\n\n"
+        "ما اینجا سعی میکنیم سفارش شما را به قیمت مناسب و بروز با پرداخت ریالی و در کمترین تایم ممکن انجام دهیم✅️❤️\n\n"
         "یکی از گزینه‌های زیر را انتخاب کنید:",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
@@ -895,6 +895,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "🔙 بازگشت",
                     callback_data="recipient_back",
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    "❌ لغو سفارش",
+                    callback_data="cancel_order",
+                )
             ]
         ]
 
@@ -910,6 +916,45 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
   
+    # CANCEL ORDER / RETURN TO MAIN MENU
+    if query.data == "cancel_order":
+        context.user_data["waiting_recipient_username"] = False
+        context.user_data["waiting_custom_stars"] = False
+        context.user_data["waiting_receipt"] = False
+        context.user_data["current_order"] = None
+
+        for key in (
+            "pending_stars",
+            "pending_usdt",
+            "pending_total",
+            "pending_username",
+            "pending_user_id",
+        ):
+            context.user_data.pop(key, None)
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "⭐ خرید Stars",
+                    callback_data="buy",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🆘 پشتیبانی",
+                    callback_data="support",
+                )
+            ],
+        ]
+
+        await query.edit_message_text(
+            "🏠 سفارش لغو شد.\n\n"
+            "به منوی اصلی برگشتید.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+
     # RECIPIENT BACK
     if query.data == "recipient_back":
         context.user_data["waiting_recipient_username"] = False
@@ -1021,13 +1066,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [
                 InlineKeyboardButton(
-                    "💳 کارت اول",
+                    "💳 شهر بانک",
                     callback_data="card_1",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "💳 کارت دوم",
+                    "💳 بلو بانک",
                     callback_data="card_2",
                 )
             ],
@@ -1064,10 +1109,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if query.data == "card_1":
             card = CARD_1
-            card_name = "کارت اول"
+            card_name = "شهر بانک"
         else:
             card = CARD_2
-            card_name = "کارت دوم"
+            card_name = "بلو بانک"
 
         update_card(code, card)
 
@@ -1401,9 +1446,9 @@ async def receive_receipt(
         caption=(
             "📥 رسید پرداخت جدید\n\n"
             f"🧾 سفارش: {code}\n"
-            f"👤 کاربر: @{user.username or 'بدون یوزرنیم'}\n"
-            f"🆔 ID: {user.id}\n"
-            f"🎯 آیدی مقصد: {order[8]}\n"
+            f"👤 سفارش‌دهنده: @{user.username or 'بدون یوزرنیم'}\n"
+            f"🆔 ID سفارش‌دهنده: {user.id}\n"
+            f"🎯 آیدی گیرنده: {order[8]}\n"
             f"⭐ Stars: {order[3]:,}\n"
             f"💰 مبلغ: {order[5]:,} تومان\n"
             f"💳 کارت: {order[6]}\n"
@@ -1508,6 +1553,12 @@ async def receive_custom_stars(
             InlineKeyboardButton(
                 "🔙 بازگشت",
                 callback_data="buy",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "❌ لغو سفارش",
+                callback_data="cancel_order",
             )
         ]
     ]
