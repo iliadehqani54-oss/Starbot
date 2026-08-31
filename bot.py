@@ -217,6 +217,22 @@ async def sync_safebox_with_wallet(context=None):
     finally:
         conn.close()
 
+
+# ---------------- TELEGRAM GIFTS ----------------
+
+TELEGRAM_GIFTS = [
+    ("گیفت قلب 💝", 0.21),
+    ("گیفت عروسک تدی 🐻", 0.21),
+    ("گیفت جعبه کادو 🎁", 0.356),
+    ("گیفت گل رز 🌹", 0.365),
+    ("گیفت کیک تولد 🎂", 0.71),
+    ("گیفت سفینه فضایی 🚀", 0.71),
+    ("گیفت بطری نوشیدنی 🍾", 0.71),
+    ("گیفت جام 🏆", 1.40),
+    ("گیفت حلقه ازدواج 💍", 1.40),
+    ("گیفت الماس 💎", 1.40),
+]
+
 DB = "orders.db"
 SAFEBOX_START = 2000
 
@@ -290,6 +306,28 @@ def init_db():
     try:
         conn.execute(
             "ALTER TABLE orders ADD COLUMN payment_expires_at TEXT"
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    # Gift order fields
+    try:
+        conn.execute(
+            "ALTER TABLE orders ADD COLUMN product_type TEXT DEFAULT 'stars'"
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute(
+            "ALTER TABLE orders ADD COLUMN product_name TEXT"
+        )
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute(
+            "ALTER TABLE orders ADD COLUMN product_ton REAL"
         )
     except sqlite3.OperationalError:
         pass
@@ -627,6 +665,39 @@ def get_current_star_price():
     return row[0]
 
 
+# ---------------- GIFT PRICING ----------------
+
+def get_current_ton_usdt():
+    conn = sqlite3.connect(DB)
+
+    row = conn.execute(
+        """
+        SELECT ton_usd, usdt_toman
+        FROM current_prices
+        WHERE id=1
+        """
+    ).fetchone()
+
+    conn.close()
+
+    if row is None:
+        return None
+
+    return row[0], row[1]
+
+
+def get_gift_price_toman(gift_ton):
+    prices = get_current_ton_usdt()
+
+    if prices is None:
+        return None
+
+    ton_usd, usdt_toman = prices
+
+    return round(gift_ton * ton_usd * usdt_toman)
+
+
+
 # ---------------- START ----------------
 
 
@@ -638,6 +709,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(
                 "⭐ خرید Stars",
                 callback_data="buy",
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "🎁 گیفت تلگرام 💝",
+                callback_data="gifts",
             )
         ],
 
@@ -709,6 +787,102 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
+
+    # GIFTS
+
+    if query.data == "gifts":
+
+        keyboard = []
+
+        for index, (gift_name, gift_ton) in enumerate(TELEGRAM_GIFTS):
+            price_toman = get_gift_price_toman(gift_ton)
+
+            if price_toman is None:
+                price_text = "قیمت نامشخص"
+            else:
+                price_text = f"{price_toman:,} تومان"
+
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{gift_name} | {price_text}",
+                    callback_data=f"gift_{index}",
+                )
+            ])
+
+        keyboard.append([
+            InlineKeyboardButton(
+                "🔙 بازگشت",
+                callback_data="back",
+            )
+        ])
+
+        await query.edit_message_text(
+            "🎁 گیفت‌های تلگرام 💝\n\n"
+            "محصول موردنظر خود را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+        return
+
+
+    # SELECT GIFT
+
+    if query.data.startswith("gift_"):
+
+        try:
+            gift_index = int(query.data.split("_")[1])
+            gift_name, gift_ton = TELEGRAM_GIFTS[gift_index]
+        except (ValueError, IndexError):
+            await query.edit_message_text(
+                "❌ گیفت انتخاب‌شده معتبر نیست."
+            )
+            return
+
+        price_toman = get_gift_price_toman(gift_ton)
+
+        if price_toman is None:
+            await query.edit_message_text(
+                "❌ قیمت گیفت در حال حاضر در دسترس نیست.\n"
+                "لطفاً چند لحظه بعد دوباره تلاش کنید."
+            )
+            return
+
+        context.user_data["waiting_gift_recipient"] = True
+        context.user_data["pending_gift_name"] = gift_name
+        context.user_data["pending_gift_ton"] = gift_ton
+        context.user_data["pending_total"] = price_toman
+        context.user_data["pending_username"] = (
+            query.from_user.username or ""
+        )
+        context.user_data["pending_user_id"] = query.from_user.id
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🔙 بازگشت",
+                    callback_data="gifts",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "❌ لغو سفارش",
+                    callback_data="cancel_order",
+                )
+            ],
+        ]
+
+        await query.edit_message_text(
+            f"🎁 محصول انتخابی: {gift_name}\n\n"
+            f"💎 قیمت: {price_toman:,} تومان\n"
+            f"💠 قیمت پایه: {gift_ton} TON\n\n"
+            "👤 آیدی تلگرام گیرنده را وارد کنید.\n\n"
+            "مثال:\n"
+            "@username",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+        return
+
 
     # BUY
 
@@ -920,6 +1094,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "cancel_order":
         context.user_data["waiting_recipient_username"] = False
         context.user_data["waiting_custom_stars"] = False
+        context.user_data["waiting_gift_recipient"] = False
         context.user_data["waiting_receipt"] = False
         context.user_data["current_order"] = None
 
@@ -929,6 +1104,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "pending_total",
             "pending_username",
             "pending_user_id",
+            "pending_gift_name",
+            "pending_gift_ton",
         ):
             context.user_data.pop(key, None)
 
@@ -941,6 +1118,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ],
             [
                 InlineKeyboardButton(
+                    "🎁 گیفت تلگرام 💝",
+                    callback_data="gifts",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "🆘 پشتیبانی",
                     callback_data="support",
                 )
@@ -948,8 +1131,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         await query.edit_message_text(
-            "🏠 سفارش لغو شد.\n\n"
-            "به منوی اصلی برگشتید.",
+            "به ربات فروش استارز خوش آمدید⭐️\n\n"
+            "ما اینجا سعی میکنیم سفارش شما را به قیمت مناسب و بروز "
+            "با پرداخت ریالی و در کمترین تایم ممکن انجام دهیم✅️❤️\n\n"
+            "یکی از گزینه‌های زیر را انتخاب کنید:",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
         return
@@ -1082,6 +1267,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     callback_data="order_back",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "❌ لغو سفارش",
+                    callback_data="cancel_order",
+                )
+            ],
         ]
 
         await query.edit_message_text(
@@ -1136,6 +1327,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     callback_data="pay",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "❌ لغو سفارش",
+                    callback_data="cancel_order",
+                )
+            ],
         ]
 
         await query.edit_message_text(
@@ -1165,6 +1362,12 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton(
                     "🔙 بازگشت",
                     callback_data="pay",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "❌ لغو سفارش",
+                    callback_data="cancel_order",
                 )
             ]
         ]
@@ -1545,7 +1748,9 @@ async def receive_custom_stars(
     context.user_data["waiting_recipient_username"] = True
     context.user_data["pending_stars"] = stars
     context.user_data["pending_total"] = total
-    context.user_data["pending_username"] = username
+    context.user_data["pending_username"] = (
+        update.effective_user.username or ""
+    )
     context.user_data["pending_user_id"] = update.effective_user.id
 
     keyboard = [
@@ -1644,6 +1849,102 @@ async def receive_recipient_username(
     )
 
 
+# ---------------- GIFT RECIPIENT USERNAME ----------------
+
+async def receive_gift_recipient(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    if not context.user_data.get("waiting_gift_recipient"):
+        return
+
+    recipient = update.message.text.strip()
+
+    if not recipient.startswith("@") or len(recipient) < 2:
+        await update.message.reply_text(
+            "❌ آیدی نامعتبر است.\n\n"
+            "لطفاً آیدی تلگرام را با @ وارد کنید.\n"
+            "مثال: @username"
+        )
+        return
+
+    gift_name = context.user_data.get("pending_gift_name")
+    gift_ton = context.user_data.get("pending_gift_ton")
+    total = context.user_data.get("pending_total")
+    username = context.user_data.get("pending_username", "")
+    user_id = context.user_data.get("pending_user_id")
+
+    if not all(
+        value is not None
+        for value in (gift_name, gift_ton, total, user_id)
+    ):
+        context.user_data["waiting_gift_recipient"] = False
+
+        await update.message.reply_text(
+            "❌ اطلاعات سفارش پیدا نشد.\n"
+            "لطفاً دوباره سفارش خود را ثبت کنید."
+        )
+        return
+
+    code = create_order(
+        user_id,
+        username,
+        0,
+        0,
+        total,
+        recipient,
+    )
+
+    conn = sqlite3.connect(DB)
+    conn.execute(
+        """
+        UPDATE orders
+        SET product_type='gift',
+            product_name=?,
+            product_ton=?
+        WHERE code=?
+        """,
+        (gift_name, gift_ton, code),
+    )
+    conn.commit()
+    conn.close()
+
+    context.user_data["waiting_gift_recipient"] = False
+    context.user_data["current_order"] = code
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "💳 پرداخت",
+                callback_data="pay",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔙 بازگشت",
+                callback_data="gifts",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "❌ لغو سفارش",
+                callback_data="cancel_order",
+            )
+        ],
+    ]
+
+    await update.message.reply_text(
+        f"🧾 سفارش شما ایجاد شد\n\n"
+        f"🔢 شماره سفارش: {code}\n"
+        f"🎁 محصول: {gift_name}\n"
+        f"👤 آیدی گیرنده: {recipient}\n"
+        f"💎 قیمت پایه: {gift_ton} TON\n"
+        f"💰 مبلغ قابل پرداخت: {total:,} تومان\n\n"
+        f"📌 وضعیت: در انتظار پرداخت",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
 # ---------------- MAIN ----------------
 
 def main():
@@ -1663,6 +1964,10 @@ def main():
     async def handle_text(update, context):
         if context.user_data.get("waiting_custom_stars"):
             await receive_custom_stars(update, context)
+            return
+
+        if context.user_data.get("waiting_gift_recipient"):
+            await receive_gift_recipient(update, context)
             return
 
         if context.user_data.get("waiting_recipient_username"):
