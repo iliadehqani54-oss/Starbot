@@ -103,6 +103,8 @@ async def update_fragment_price():
         f"1 Star = {TON_PER_STAR:.8f} TON"
     )
 
+    await update_prices()
+
     return True
 
 
