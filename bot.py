@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
+print("TOKEN CHECK:", bool(TOKEN), len(TOKEN or ""))
 
 ADMIN_ID = 7959551548
 
