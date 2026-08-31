@@ -603,7 +603,16 @@ async def update_prices():
 
 def get_current_star_price():
     conn = sqlite3.connect(DB)
-
+    
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS current_prices (
+            id INTEGER PRIMARY KEY,
+            ton_usd REAL NOT NULL,
+            usdt_toman REAL NOT NULL,
+            star_toman REAL NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
     row = conn.execute(
         "SELECT star_toman FROM current_prices WHERE id=1"
     ).fetchone()
