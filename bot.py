@@ -2024,9 +2024,9 @@ def main():
 
     app.job_queue.run_repeating(
         refresh_fragment_and_safebox,
-        interval=86400,
+        interval=21600,
         first=10,
-        name="fragment_price_24h",
+        name="fragment_price_6h",
     )
 
 # ---------------- PAYMENT EXPIRATION JOB ----------------
