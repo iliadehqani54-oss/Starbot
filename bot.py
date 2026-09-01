@@ -1673,6 +1673,21 @@ async def receive_receipt(
 
     user = update.effective_user
 
+    product_type = order[9] if len(order) > 9 else "stars"
+    product_name = order[10] if len(order) > 10 else None
+    product_ton = order[11] if len(order) > 11 else None
+
+    if product_type == "gift":
+        product_info = (
+            f"🎁 گیفت: {product_name}\n"
+            f"💎 قیمت پایه: {product_ton} TON\n"
+        )
+    else:
+        product_info = (
+            f"⭐ Stars: {order[3]:,}\n"
+            f"💱 نرخ USDT: {order[4]:,.0f} تومان\n"
+        )
+
     keyboard = [
         [
             InlineKeyboardButton(
@@ -1697,10 +1712,9 @@ async def receive_receipt(
             f"👤 سفارش‌دهنده: @{user.username or 'بدون یوزرنیم'}\n"
             f"🆔 ID سفارش‌دهنده: {user.id}\n"
             f"🎯 آیدی گیرنده: {order[8]}\n"
-            f"⭐ Stars: {order[3]:,}\n"
+            f"{product_info}"
             f"💰 مبلغ: {order[5]:,} تومان\n"
-            f"💳 کارت: {order[6]}\n"
-            f"💱 نرخ USDT: {order[4]:,.0f} تومان"
+            f"💳 کارت: {order[6]}"
         ),
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
