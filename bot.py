@@ -423,7 +423,8 @@ def get_order(code):
     row = conn.execute(
         """
         SELECT code, user_id, username, stars,
-               usdt, total, card, status, recipient_username
+               usdt, total, card, status, recipient_username,
+               product_type, product_name, product_ton
         FROM orders
         WHERE code=?
         """,
@@ -1408,11 +1409,22 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         stars_amount = order[3]
+        product_type = order[9] if len(order) > 9 else "stars"
+        product_name = order[10] if len(order) > 10 else None
+        product_ton = order[11] if len(order) > 11 else None
 
         # Stars قبلاً هنگام ورود به مرحله پرداخت رزرو شده‌اند.
         update_status(code, "approved")
 
         user_id = order[1]
+
+        if product_type == "gift":
+            product_text = (
+                f"🎁 گیفت: {product_name}\n"
+                f"💎 قیمت پایه: {product_ton} TON"
+            )
+        else:
+            product_text = f"⭐ تعداد Stars: {stars_amount:,}"
 
         delivery_keyboard = [
             [
@@ -1428,7 +1440,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=(
                 f"✅ پرداخت سفارش {code} تأیید شد.\n\n"
                 f"👤 آیدی مقصد: {order[8]}\n"
-                f"⭐ تعداد Stars: {order[3]:,}\n\n"
+                f"{product_text}\n\n"
                 "⏳ سفارش شما وارد مرحله تحویل شد."
             ),
         )
@@ -1439,8 +1451,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📦 سفارش آماده تحویل\n\n"
                 f"🧾 سفارش: {code}\n"
                 f"👤 آیدی مقصد: {order[8]}\n"
-                f"⭐ Stars: {order[3]:,}\n\n"
-                "پس از انتقال دستی Stars به آیدی مقصد، "
+                f"{product_text}\n\n"
+                "پس از تحویل محصول به آیدی مقصد، "
                 "دکمه زیر را بزنید."
             ),
             reply_markup=InlineKeyboardMarkup(delivery_keyboard),
@@ -1475,8 +1487,40 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        product_type = order[9] if len(order) > 9 else "stars"
+        product_name = order[10] if len(order) > 10 else None
+        product_ton = order[11] if len(order) > 11 else None
         stars_amount = order[3]
 
+        # GIFT DELIVERY
+        if product_type == "gift":
+
+            update_status(code, "delivered")
+
+            user_id = order[1]
+
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"🎉 سفارش {code} تحویل داده شد.\n\n"
+                    f"🎁 گیفت: {product_name}\n"
+                    f"💎 قیمت پایه: {product_ton} TON\n"
+                    f"👤 آیدی مقصد: {order[8]}\n\n"
+                    "ممنون از خرید شما ❤️"
+                ),
+            )
+
+            await query.edit_message_text(
+                f"✅ تحویل گیفت انجام شد\n\n"
+                f"🧾 سفارش: {code}\n"
+                f"🎁 گیفت: {product_name}\n"
+                f"💎 قیمت پایه: {product_ton} TON\n"
+                f"👤 آیدی مقصد: {order[8]}"
+            )
+
+            return
+
+        # STARS DELIVERY
         conn = sqlite3.connect(DB)
         row = conn.execute(
             "SELECT total, reserved FROM safebox WHERE id=1"
@@ -1526,7 +1570,8 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=user_id,
             text=(
                 f"🎉 سفارش {code} تحویل داده شد.\n\n"
-                f"⭐ تعداد Stars: {stars_amount:,}\n\n"
+                f"⭐ تعداد Stars: {stars_amount:,}\n"
+                f"👤 آیدی مقصد: {order[8]}\n\n"
                 "ممنون از خرید شما ❤️"
             ),
         )
