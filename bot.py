@@ -5,6 +5,8 @@ import re
 import uuid
 import httpx
 from datetime import datetime, time, timedelta, timedelta
+from zoneinfo import ZoneInfo
+from night_messages import get_night_message
 
 from telegram import (
     Update,
@@ -331,6 +333,29 @@ def init_db():
         )
     except sqlite3.OperationalError:
         pass
+
+    # ---------------- NIGHTLY MESSAGE TABLES ----------------
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bot_users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            night_messages INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS night_message_state (
+            id INTEGER PRIMARY KEY,
+            message_index INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    conn.execute(
+        "INSERT OR IGNORE INTO night_message_state "
+        "(id, message_index) VALUES (1, 0)"
+    )
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS safebox (
@@ -705,6 +730,23 @@ def get_gift_price_toman(gift_ton):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    user = update.effective_user
+
+    conn = sqlite3.connect(DB)
+    conn.execute(
+        """
+        INSERT INTO bot_users (user_id, username)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET username=excluded.username
+        """,
+        (
+            user.id,
+            user.username or "",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
     keyboard = [
         [
             InlineKeyboardButton(
@@ -788,6 +830,78 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return
+
+    # NIGHTLY MESSAGE - OPEN STORE
+
+    if query.data == "nightly_store":
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "⭐ خرید Stars",
+                    callback_data="buy",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🎁 گیفت تلگرام 💝",
+                    callback_data="gifts",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🆘 پشتیبانی",
+                    callback_data="support",
+                )
+            ],
+        ]
+
+        await query.edit_message_text(
+            "به ربات فروش استارز خوش آمدید⭐️\n\n"
+            "ما اینجا سعی میکنیم سفارش شما را به قیمت مناسب و بروز "
+            "با پرداخت ریالی و در کمترین تایم ممکن انجام دهیم✅️❤️\n\n"
+            "یکی از گزینه‌های زیر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+        return
+
+
+    # NIGHTLY MESSAGE - DISABLE
+
+    if query.data == "disable_nightly":
+
+        user_id = query.from_user.id
+
+        conn = sqlite3.connect(DB)
+        conn.execute(
+            """
+            UPDATE bot_users
+            SET night_messages=0
+            WHERE user_id=?
+            """,
+            (user_id,),
+        )
+        conn.commit()
+        conn.close()
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🛍️ فروشگاه محصولات",
+                    callback_data="nightly_store",
+                )
+            ]
+        ]
+
+        await query.edit_message_text(
+            "🔕 پیام‌های شبانه برای شما غیرفعال شد.\n\n"
+            "هر زمان خواستی دوباره از طریق فروشگاه وارد ربات شو ❤️",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+        return
+
 
     # GIFTS
 
@@ -2004,6 +2118,90 @@ async def receive_gift_recipient(
     )
 
 
+# ---------------- NIGHTLY MESSAGES ----------------
+
+async def send_nightly_message(context):
+    conn = sqlite3.connect(DB)
+
+    users = conn.execute(
+        """
+        SELECT user_id
+        FROM bot_users
+        WHERE night_messages=1
+        """
+    ).fetchall()
+
+    row = conn.execute(
+        """
+        SELECT message_index
+        FROM night_message_state
+        WHERE id=1
+        """
+    ).fetchone()
+
+    message_index = row[0] if row else 0
+
+    conn.close()
+
+    # Get the message for this night.
+    text = get_night_message(message_index)
+
+    if not text:
+        print("Nightly message list is empty.")
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🛍️ فروشگاه محصولات",
+                callback_data="nightly_store",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔕 لغو پیام‌های شبانه",
+                callback_data="disable_nightly",
+            )
+        ],
+    ]
+
+    sent_count = 0
+
+    for (user_id,) in users:
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+            sent_count += 1
+
+        except Exception as e:
+            print(
+                f"Nightly message failed for {user_id}: {e}"
+            )
+
+    # Move to the next message index.
+    # This will be used by the 365-message system.
+    conn = sqlite3.connect(DB)
+
+    conn.execute(
+        """
+        UPDATE night_message_state
+        SET message_index=?
+        WHERE id=1
+        """,
+        ((message_index + 1) % 365,),
+    )
+
+    conn.commit()
+    conn.close()
+
+    print(
+        f"Nightly message sent to {sent_count} users."
+    )
+
+
 # ---------------- MAIN ----------------
 
 def main():
@@ -2061,6 +2259,18 @@ def main():
         update_prices,
         time=time(hour=15, minute=0),
         name="price_update_15",
+    )
+
+    # ---------------- NIGHTLY MESSAGE JOB ----------------
+
+    app.job_queue.run_daily(
+        send_nightly_message,
+        time=time(
+            hour=0,
+            minute=0,
+            tzinfo=ZoneInfo("Asia/Tehran"),
+        ),
+        name="nightly_messages",
     )
 
     # ---------------- SAFEBOX WALLET SYNC ----------------
