@@ -815,6 +815,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton(
                     "⭐ خرید Stars",
+                        style="success",
                     callback_data="buy",
                 )
             ],
@@ -822,6 +823,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton(
                     "🆘 پشتیبانی",
+                        style="danger",
                     callback_data="support",
                 )
             ],
@@ -842,18 +844,21 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton(
                     "⭐ خرید Stars",
+                        style="success",
                     callback_data="buy",
                 )
             ],
             [
                 InlineKeyboardButton(
                     "🎁 گیفت تلگرام 💝",
+                        style="primary",
                     callback_data="gifts",
                 )
             ],
             [
                 InlineKeyboardButton(
                     "🆘 پشتیبانی",
+                        style="danger",
                     callback_data="support",
                 )
             ],
@@ -1231,18 +1236,21 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton(
                     "⭐ خرید Stars",
+                        style="success",
                     callback_data="buy",
                 )
             ],
             [
                 InlineKeyboardButton(
                     "🎁 گیفت تلگرام 💝",
+                        style="primary",
                     callback_data="gifts",
                 )
             ],
             [
                 InlineKeyboardButton(
                     "🆘 پشتیبانی",
+                        style="danger",
                     callback_data="support",
                 )
             ],
