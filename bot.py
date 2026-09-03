@@ -613,7 +613,14 @@ async def update_prices():
         if ton_price is not None and usdt_price is not None:
             usdt_price += USDT_MARKUP
 
-            star_price = TON_PER_STAR * ton_price * usdt_price
+            # قیمت خرید 50 Stars طبق فرمول Fragment
+            price_50_stars = TON_PER_50_STARS * ton_price * usdt_price
+
+            # قیمت خرید هر Star
+            buy_star_price = price_50_stars / 50
+
+            # 18 درصد سود
+            star_price = buy_star_price * 1.18
 
             conn = sqlite3.connect(DB)
 
