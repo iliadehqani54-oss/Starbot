@@ -620,7 +620,7 @@ async def update_prices():
             buy_star_price = price_50_stars / 50
 
             # 18 درصد سود
-            star_price = buy_star_price * 1.18
+            star_price = buy_star_price * 1.15
 
             conn = sqlite3.connect(DB)
 
