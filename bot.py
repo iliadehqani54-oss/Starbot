@@ -752,6 +752,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(
                 "⭐ خرید Stars",
                 callback_data="buy",
+                style="success",
             )
         ],
 
@@ -759,6 +760,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(
                 "🎁 گیفت تلگرام 💝",
                 callback_data="gifts",
+                style="primary",
             )
         ],
 
@@ -766,6 +768,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(
                 "🆘 پشتیبانی",
                 callback_data="support",
+                style="danger",
             )
         ],
     ]
